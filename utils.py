@@ -302,3 +302,44 @@ def check_parallel_choices(row, answer_cols=['A - Text', 'B - Text', 'C - Text',
 
     diff = max(word_counts) - min(word_counts)
     return "Flagged" if diff > max_word_diff else "OK"
+
+# ==========================================================================
+# FILE PROCESSING & VISUALIZATION (Restored)
+# ==========================================================================
+import matplotlib.pyplot as plt
+
+ANSWER_TEXT_COLS = ['A - Text', 'B - Text', 'C - Text', 'D - Text', 'E - Text', 'F - Text', 'G - Text']
+
+def process_uploaded_file(file):
+    """Reads the uploaded ExamSoft CSV."""
+    try:
+        return pd.read_csv(file)
+    except Exception as e:
+        return None
+
+def generate_psychometric_chart(df):
+    """Generates a scatter plot of Point Biserial vs Difficulty."""
+    if 'Diff(p)' not in df.columns or 'Point Biserial' not in df.columns:
+        return None
+        
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.scatter(df['Diff(p)'], df['Point Biserial'], alpha=0.7, color='#1f77b4', edgecolor='black')
+    ax.set_xlabel("Difficulty (p-value)")
+    ax.set_ylabel("Point Biserial")
+    ax.set_title("Item Psychometric Distribution")
+    
+    # Add benchmark line for acceptable Point Biserial
+    ax.axhline(0.20, color='red', linestyle='--', alpha=0.6, label='0.20 Threshold')
+    ax.legend()
+    return fig
+
+def generate_analysis_pie_chart(good_count, bad_count, good_label, bad_label):
+    """Generates a simple pie chart for flaw breakdowns."""
+    fig, ax = plt.subplots(figsize=(3, 3))
+    # Green for good, Red for flagged
+    colors = ['#4CAF50', '#F44336'] 
+    ax.pie([good_count, bad_count], labels=[good_label, bad_label], 
+           autopct='%1.1f%%', colors=colors, startangle=90, 
+           wedgeprops={'edgecolor': 'white'})
+    ax.axis('equal')
+    return fig
