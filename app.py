@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import joblib
 import importlib
+import matplotlib.pyplot as plt
 import utils
 importlib.reload(utils)
 from utils import (
@@ -13,6 +14,7 @@ from utils import (
     check_k_type_v8,
     process_uploaded_file,
     generate_analysis_pie_chart,
+    generate_difficulty_distribution_chart,
     ANSWER_TEXT_COLS
 )
 
@@ -153,92 +155,91 @@ with tab2:
                 st.error(f"❌ Failed to process '{file.name}'. Reason: {error_msg}")
         
         if all_data:
-            combined_df = pd.concat(all_data, ignore_index=True)
-            
-            # --- RUN PIPELINE ---
-            
-            # 1. Unfocused Stem (New Hybrid Pipeline)
-            labels, scores = apply_hybrid_unfocused_detection(combined_df, rf_model, vectorizer, label_encoder)
-            combined_df['Unfocused_Check'] = labels
+            with st.spinner("Running analysis — this may take a moment…"):
+                combined_df = pd.concat(all_data, ignore_index=True)
 
-            # 2. Other Checks
-            combined_df['Negative_Check'] = combined_df['Item Text'].fillna('').apply(check_negative_phrasing_regex)
-            combined_df['Blank_Check'] = combined_df['Item Text'].fillna('').apply(check_blank_placement_regex)
-            
-            # 3. K-Type Logic (New v8 Combined Function)
-            k_results = combined_df.apply(check_k_type_v8, axis=1)
-            combined_df['AOTA_Check'] = k_results.apply(lambda x: 'Flagged' if 'All/None of the Above' in x else 'OK')
-            combined_df['Multi_Correct_Check'] = k_results.apply(lambda x: 'Flagged' if 'Multiple Correct Answers' in x else 'OK')
-            combined_df['K_Type_Check'] = k_results.apply(lambda x: 'Flagged' if 'K Type' in x else 'OK')
+                labels, scores = apply_hybrid_unfocused_detection(combined_df, rf_model, vectorizer, label_encoder)
+                combined_df['Unfocused_Check'] = labels
 
-            # 4. Distractors and Parallelism
-            combined_df['NFD_Check'] = combined_df.apply(check_non_functioning_distractors, axis=1)
-            combined_df['Parallel_Check'] = combined_df.apply(check_parallel_choices, axis=1)
+                combined_df['Negative_Check'] = combined_df['Item Text'].fillna('').apply(check_negative_phrasing_regex)
+                combined_df['Blank_Check']     = combined_df['Item Text'].fillna('').apply(check_blank_placement_regex)
 
-            # SAVE TO SESSION STATE
-            st.session_state['exam_data'] = combined_df
+                k_results = combined_df.apply(check_k_type_v8, axis=1)
+                combined_df['AOTA_Check']         = k_results.apply(lambda x: 'Flagged' if 'All/None of the Above'   in x else 'OK')
+                combined_df['Multi_Correct_Check'] = k_results.apply(lambda x: 'Flagged' if 'Multiple Correct Answers' in x else 'OK')
+                combined_df['K_Type_Check']        = k_results.apply(lambda x: 'Flagged' if 'K Type'                  in x else 'OK')
+
+                combined_df['NFD_Check']      = combined_df.apply(check_non_functioning_distractors, axis=1)
+                combined_df['Parallel_Check'] = combined_df.apply(check_parallel_choices, axis=1)
+
+                st.session_state['exam_data'] = combined_df
 
     # --- DISPLAY RESULTS (FROM STATE) ---
     if st.session_state['exam_data'] is not None:
         combined_df = st.session_state['exam_data']
         total_items = len(combined_df)
-        
-        st.success(f"Loaded {total_items} items.")
 
-        # Flaw Analysis Breakdown (Pie Charts)
+        st.success(f"✅ Loaded {total_items} items for analysis.")
+
+        # --- 1. Difficulty Distribution ---
+        st.divider()
+        st.subheader("Item Difficulty Distribution")
+        diff_fig = generate_difficulty_distribution_chart(combined_df)
+        st.pyplot(diff_fig, use_container_width=True)
+        plt.close(diff_fig)
+
+        # --- 2. Flaw Analysis Breakdown ---
         st.divider()
         st.subheader("Flaw Analysis Breakdown")
-        
-        charts_to_show = []
-        
-        # Unfocused
-        u_fail = len(combined_df[combined_df['Unfocused_Check'] == 'Unfocused'])
-        if u_fail > 0:
-            charts_to_show.append(generate_analysis_pie_chart(total_items - u_fail, u_fail, "Focused", "Unfocused"))
-            
-        # Negative
-        n_fail = len(combined_df[combined_df['Negative_Check'] == 'Negative'])
-        if n_fail > 0:
-            charts_to_show.append(generate_analysis_pie_chart(total_items - n_fail, n_fail, "Positive", "Negative"))
-            
-        # K-Type (Combined Logic for Visuals)
-        k_fail = len(combined_df[
-            (combined_df['K_Type_Check'] == 'Flagged') | 
-            (combined_df['AOTA_Check'] == 'Flagged') | 
-            (combined_df['Multi_Correct_Check'] == 'Flagged')
-        ])
-        if k_fail > 0:
-            charts_to_show.append(generate_analysis_pie_chart(total_items - k_fail, k_fail, "Standard", "K-Type/Multi"))
 
-        # NFDs
-        d_fail = len(combined_df[combined_df['NFD_Check'] == 'Flagged'])
-        if d_fail > 0:
-            charts_to_show.append(generate_analysis_pie_chart(total_items - d_fail, d_fail, "Good", "NFDs"))
+        u_fail    = len(combined_df[combined_df['Unfocused_Check']     == 'Unfocused'])
+        n_fail    = len(combined_df[combined_df['Negative_Check']      == 'Negative'])
+        b_fail    = len(combined_df[combined_df['Blank_Check']         == 'Bad Placement'])
+        aota_fail = len(combined_df[combined_df['AOTA_Check']          == 'Flagged'])
+        mc_fail   = len(combined_df[combined_df['Multi_Correct_Check'] == 'Flagged'])
+        kt_fail   = len(combined_df[combined_df['K_Type_Check']        == 'Flagged'])
+        d_fail    = len(combined_df[combined_df['NFD_Check']           == 'Flagged'])
+        p_fail    = len(combined_df[combined_df['Parallel_Check']      == 'Flagged'])
 
-        # Parallelism
-        p_fail = len(combined_df[combined_df['Parallel_Check'] == 'Flagged'])
-        if p_fail > 0:
-            charts_to_show.append(generate_analysis_pie_chart(total_items - p_fail, p_fail, "Parallel", "Non-Parallel"))
+        # 8 fixed slots in two rows of 4 — same size regardless of how many are flagged
+        pie_configs = [
+            ("Unfocused Stem",      u_fail,    "Focused",  "Unfocused"),
+            ("Negative Phrasing",   n_fail,    "Positive", "Negative"),
+            ("Bad Blank Placement", b_fail,    "OK",       "Bad Placement"),
+            ("All/None of Above",   aota_fail, "Standard", "AOTA/NOTA"),
+            ("Multiple Correct",    mc_fail,   "Standard", "Multi-Correct"),
+            ("K-Type Format",       kt_fail,   "Standard", "K-Type"),
+            ("Distractors (NFD)",   d_fail,    "Good",     "NFDs"),
+            ("Non-Parallel",        p_fail,    "Parallel", "Non-Parallel"),
+        ]
 
-        # Display charts dynamically
-        if charts_to_show:
-            cols = st.columns(len(charts_to_show))
-            for i, fig in enumerate(charts_to_show):
-                if fig:
-                    cols[i].pyplot(fig, use_container_width=True)
+        if not any(fail > 0 for _, fail, *_ in pie_configs):
+            st.success("🎉 No major flaws detected across the exam!")
         else:
-            st.info("No major flaws detected across the exam!")
+            row1 = st.columns(4)
+            row2 = st.columns(4)
+            for col, (title, fail, good_lbl, bad_lbl) in zip(row1, pie_configs[:4]):
+                if fail > 0:
+                    fig = generate_analysis_pie_chart(total_items - fail, fail, good_lbl, bad_lbl, title)
+                    col.pyplot(fig, use_container_width=True)
+                    plt.close(fig)
+            for col, (title, fail, good_lbl, bad_lbl) in zip(row2, pie_configs[4:]):
+                if fail > 0:
+                    fig = generate_analysis_pie_chart(total_items - fail, fail, good_lbl, bad_lbl, title)
+                    col.pyplot(fig, use_container_width=True)
+                    plt.close(fig)
 
+        # --- 3. Detailed Flag Counts ---
         st.subheader("Detailed Flag Counts")
-        
-        c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
-        with c1: st.metric("Unfocused", u_fail, delta_color="inverse")
-        with c2: st.metric("Negative", n_fail, delta_color="inverse")
-        with c3: st.metric("Bad Blanks", len(combined_df[combined_df['Blank_Check'] == 'Bad Placement']), delta_color="inverse")
-        with c4: st.metric("All/None", len(combined_df[combined_df['AOTA_Check'] == 'Flagged']), delta_color="inverse")
-        with c5: st.metric("Multi-Ans", len(combined_df[combined_df['Multi_Correct_Check'] == 'Flagged']), delta_color="inverse")
-        with c6: st.metric("K-Type", len(combined_df[combined_df['K_Type_Check'] == 'Flagged']), delta_color="inverse")
-        with c7: st.metric("Distractors", d_fail, delta_color="inverse")
+        c1, c2, c3, c4, c5, c6, c7, c8 = st.columns(8)
+        with c1: st.metric("Unfocused",    u_fail,    delta_color="inverse")
+        with c2: st.metric("Negative",     n_fail,    delta_color="inverse")
+        with c3: st.metric("Bad Blanks",   b_fail,    delta_color="inverse")
+        with c4: st.metric("All/None",     aota_fail, delta_color="inverse")
+        with c5: st.metric("Multi-Ans",    mc_fail,   delta_color="inverse")
+        with c6: st.metric("K-Type",       kt_fail,   delta_color="inverse")
+        with c7: st.metric("Distractors",  d_fail,    delta_color="inverse")
+        with c8: st.metric("Non-Parallel", p_fail,    delta_color="inverse")
 
         st.divider()
         st.subheader("Review Flagged Items")

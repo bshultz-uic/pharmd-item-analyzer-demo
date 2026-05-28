@@ -357,8 +357,8 @@ def process_uploaded_file(file):
         return None, f"Python Error: {str(e)}"
 
 
-def generate_analysis_pie_chart(good_count, bad_count, good_label, bad_label):
-    """Generates a pie chart for flaw breakdowns. figsize is fixed so all charts render uniformly."""
+def generate_analysis_pie_chart(good_count, bad_count, good_label, bad_label, title=""):
+    """Generates a pie chart for a single flaw category. Fixed figsize ensures uniform rendering."""
     fig, ax = plt.subplots(figsize=(3, 3))
     colors = ['#4CAF50', '#F44336']
     ax.pie(
@@ -370,4 +370,144 @@ def generate_analysis_pie_chart(good_count, bad_count, good_label, bad_label):
         wedgeprops={'edgecolor': 'white'},
     )
     ax.axis('equal')
+    if title:
+        ax.set_title(title, fontsize=9, fontweight='bold', pad=4)
+    return fig
+
+
+def categorize_item_psychometrics(difficulty, point_biserial):
+    """Assigns each item to a psychometric difficulty band matching the pipeline report."""
+    try:
+        diff = float(difficulty)
+        pb = float(point_biserial)
+    except (ValueError, TypeError):
+        return "Uncategorized"
+    if diff >= 0.939:
+        return "Very Easy"
+    elif diff >= 0.869:
+        return "Moderately Easy" if pb >= 0.145 else "Uncategorized"
+    elif diff >= 0.769:
+        return "Target Zone" if pb >= 0.195 else "Uncategorized"
+    elif diff >= 0.639:
+        return "Challenging" if pb >= 0.145 else "Uncategorized"
+    else:
+        return "Most Challenging"
+
+
+def generate_difficulty_distribution_chart(df, course_label="Your Course"):
+    """
+    Horizontal stacked-bar chart matching the pipeline report's psychometric category display.
+    Top bar = course distribution, bottom bar = fixed benchmark (5/20/50/20/5).
+    Legend below shows category name, difficulty range, and PBS threshold.
+    """
+    from matplotlib.patches import Rectangle
+
+    categories = ["Most Challenging", "Challenging", "Target Zone", "Moderately Easy", "Very Easy"]
+    color_map = {
+        "Most Challenging": '#FF800E',
+        "Challenging":      '#FFBC79',
+        "Target Zone":      '#006BA4',
+        "Moderately Easy":  '#5F9ED1',
+        "Very Easy":        '#A2C8EC',
+        "Uncategorized":    '#C8D0D9',
+    }
+    benchmark = [5, 20, 50, 20, 5]
+
+    psych = df.apply(
+        lambda r: categorize_item_psychometrics(r.get('Diff(p)'), r.get('Point Biserial')),
+        axis=1,
+    )
+    counts = psych.value_counts()
+    n = max(len(df), 1)
+
+    unc_pct  = counts.get("Uncategorized", 0) / n * 100
+    raw      = [counts.get(c, 0) / n * 100 for c in categories]
+    total_all = sum(raw) + unc_pct
+    norm     = 100.0 / total_all if total_all > 0 else 1
+    course_vals = [v * norm for v in raw]
+    unc_display = unc_pct * norm
+
+    fig, ax = plt.subplots(figsize=(10, 4.5))
+    plt.subplots_adjust(top=0.88, bottom=0.34, left=0.13, right=0.97)
+
+    y_pos = [1, 0]
+    bh = 0.5
+    colors_list = [color_map[c] for c in categories]
+
+    # Course bar
+    left = 0
+    if unc_display > 0:
+        ax.barh(y_pos[0], unc_display, left=left, height=bh,
+                color=color_map["Uncategorized"], edgecolor='white', linewidth=1)
+        if unc_display >= 3:
+            ax.text(left + unc_display / 2, y_pos[0], f"{unc_display:.0f}%",
+                    ha='center', va='center', fontsize=11, weight='bold', color='black')
+        left += unc_display
+    for cat, val in zip(categories, course_vals):
+        if val > 0:
+            ax.barh(y_pos[0], val, left=left, height=bh,
+                    color=color_map[cat], edgecolor='white', linewidth=1)
+            if val >= 3:
+                tc = 'white' if cat in ("Target Zone", "Very Easy") else 'black'
+                ax.text(left + val / 2, y_pos[0], f"{val:.0f}%",
+                        ha='center', va='center', fontsize=11, weight='bold', color=tc)
+            left += val
+
+    # Benchmark bar
+    left = 0
+    for cat, val in zip(categories, benchmark):
+        ax.barh(y_pos[1], val, left=left, height=bh,
+                color=color_map[cat], edgecolor='white', linewidth=1)
+        tc = 'white' if cat in ("Target Zone", "Very Easy") else 'black'
+        ax.text(left + val / 2, y_pos[1], f"{val}%",
+                ha='center', va='center', fontsize=11, weight='bold', color=tc)
+        left += val
+
+    ax.set_xlim(0, 100)
+    ax.set_ylim(-0.5, 1.8)
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels([course_label, 'Benchmark'], fontsize=13, weight='bold')
+    ax.set_xlabel('Percentage of Items (%)', fontsize=12, weight='bold')
+    ax.set_xticks(range(0, 101, 10))
+    ax.tick_params(axis='x', labelsize=11)
+    ax.grid(axis='x', alpha=0.3, linestyle='--', linewidth=0.5)
+    ax.set_axisbelow(True)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
+    fig.text(0.55, 0.97, "Items by Psychometric Category",
+             ha='center', fontsize=15, weight='bold')
+    fig.text(0.55, 0.92,
+             "Item difficulty categories calibrated to program-level quintiles.",
+             ha='center', fontsize=10, style='italic')
+
+    legend_cats = ["Uncategorized", "Most Challenging", "Challenging",
+                   "Target Zone", "Moderately Easy", "Very Easy"]
+    legend_details = {
+        "Uncategorized":    ("Uncategorized",   "Did not meet criteria", ""),
+        "Most Challenging": ("Most Challenging", "Diff: <0.64",          "PBS: Any"),
+        "Challenging":      ("Challenging",      "Diff: 0.64–0.76", "PBS: >0.15"),
+        "Target Zone":      ("Target Zone",      "Diff: 0.77–0.86", "PBS: >0.20"),
+        "Moderately Easy":  ("Moderately Easy",  "Diff: 0.87–0.93", "PBS: >0.15"),
+        "Very Easy":        ("Very Easy",        "Diff: >0.94",          "PBS: Any"),
+    }
+    x0, bw = 0.05, 0.155
+    ly = 0.09
+    for i, cat in enumerate(legend_cats):
+        x = x0 + i * bw
+        rect = Rectangle((x, ly + 0.045), bw * 0.88, 0.025,
+                          facecolor=color_map[cat], edgecolor='white',
+                          linewidth=1, transform=fig.transFigure)
+        fig.add_artist(rect)
+        name, line2, line3 = legend_details[cat]
+        fig.text(x + bw * 0.44, ly + 0.025, name,
+                 ha='center', va='top', fontsize=9, weight='bold',
+                 transform=fig.transFigure)
+        fig.text(x + bw * 0.44, ly - 0.005, line2,
+                 ha='center', va='top', fontsize=8,
+                 transform=fig.transFigure)
+        if line3:
+            fig.text(x + bw * 0.44, ly - 0.035, line3,
+                     ha='center', va='top', fontsize=8,
+                     transform=fig.transFigure)
     return fig
