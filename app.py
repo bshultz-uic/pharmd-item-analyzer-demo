@@ -1,9 +1,12 @@
 import streamlit as st
 import pandas as pd
 import joblib
+import importlib
+import utils
+importlib.reload(utils)
 from utils import (
-    check_blank_placement_regex, 
-    check_negative_phrasing_regex, 
+    check_blank_placement_regex,
+    check_negative_phrasing_regex,
     check_parallel_choices,
     apply_hybrid_unfocused_detection,
     check_non_functioning_distractors,
