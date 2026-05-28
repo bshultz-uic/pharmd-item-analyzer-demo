@@ -146,6 +146,8 @@ with tab2:
             if df is not None:
                 df['Source_File'] = file.name
                 all_data.append(df)
+            else:
+                st.error(f"❌ Failed to process '{file.name}'. Ensure it is an ExamSoft CSV with Multiple Choice (MC) questions.")
         
         if all_data:
             combined_df = pd.concat(all_data, ignore_index=True)
