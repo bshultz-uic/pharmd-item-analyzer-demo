@@ -54,25 +54,7 @@ with tab1:
             st.subheader("Results")
             flaws_found = False 
 
-            # 1. Blank Placement
-            blank_res = check_blank_placement_regex(stem_input)
-            if blank_res == "Bad Placement":
-                st.error(f"❌ Blank Placement: {blank_res}")
-                flaws_found = True
-            elif blank_res == "Good Placement":
-                st.success("✅ Blank Placement: Good")
-            else:
-                st.info("ℹ️ Blank Placement: N/A (Direct question detected)")
-
-            # 2. Negative Phrasing
-            neg_res = check_negative_phrasing_regex(stem_input)
-            if neg_res == "Negative":
-                st.error("❌ Negative Phrasing: Detected")
-                flaws_found = True
-            else:
-                st.success("✅ Negative Phrasing: None Detected")
-
-            # 3. Unfocused Stem (Using new Hybrid Logic via DataFrame)
+            # 1. Unfocused Stem
             single_df = pd.DataFrame([{'Item Text': stem_input}])
             labels, _ = apply_hybrid_unfocused_detection(single_df, rf_model, vectorizer, label_encoder)
             final_unfocused = labels[0]
@@ -82,6 +64,24 @@ with tab1:
                 flaws_found = True
             else:
                 st.success("✅ Stem Focus: Focused")
+
+            # 2. Negative Phrasing
+            neg_res = check_negative_phrasing_regex(stem_input)
+            if neg_res == "Negative":
+                st.error("❌ Negative Phrasing: Detected")
+                flaws_found = True
+            else:
+                st.success("✅ Negative Phrasing: None Detected")
+
+            # 3. Blank Placement
+            blank_res = check_blank_placement_regex(stem_input)
+            if blank_res == "Bad Placement":
+                st.error(f"❌ Blank Placement: Bad Placement")
+                flaws_found = True
+            elif blank_res == "Good Placement":
+                st.success("✅ Blank Placement: Good")
+            else:
+                st.info("ℹ️ Blank Placement: N/A (Direct question)")
 
             # 4. Distractors
             distractors_list = [d for d in distractors_raw.split('\n') if d.strip()]
@@ -93,6 +93,27 @@ with tab1:
                     mock_row[f"{chr(65+i)} - Text"] = opt
                 mock_series = pd.Series(mock_row)
 
+                # K-Type / AOTA / Multi Check
+                k_res = check_k_type_v8(mock_series)
+                
+                if "All/None of the Above" in k_res:
+                    st.error("❌ Distractors: 'All/None of the Above' detected")
+                    flaws_found = True
+                else:
+                    st.success("✅ Distractors: No 'All/None of the Above' cues")
+
+                if "Multiple Correct Answers" in k_res:
+                    st.error("❌ Distractors: Multiple Correct Answer cues detected")
+                    flaws_found = True
+                else:
+                    st.success("✅ Distractors: No Multiple Correct cues")
+
+                if "K Type" in k_res:
+                    st.error("❌ Distractors: K-Type (Roman Numerals) detected")
+                    flaws_found = True
+                else:
+                    st.success("✅ Distractors: No K-Type Formatting")
+
                 # Parallel Check
                 parallel_res = check_parallel_choices(mock_series)
                 if parallel_res == "Flagged":
@@ -100,21 +121,9 @@ with tab1:
                     flaws_found = True
                 else:
                     st.success("✅ Distractors: Parallel (Length)")
-                
-                # K-Type / AOTA / Multi Check (v8 logic)
-                k_res = check_k_type_v8(mock_series)
-                
-                if "All/None of the Above" in k_res:
-                    st.error("❌ Distractors: 'All/None of the Above' detected")
-                    flaws_found = True
-                if "Multiple Correct Answers" in k_res:
-                    st.error("❌ Distractors: Multiple Correct Answer cues detected")
-                    flaws_found = True
-                if "K Type" in k_res:
-                    st.error("❌ Distractors: K-Type (Roman Numerals) detected")
-                    flaws_found = True
+
             else:
-                st.info("ℹ️ Distractors: Enter choices to check.")
+                st.info("ℹ️ Enter at least 2 answer choices to check distractors for All/None, Multi-Correct, and K-Type.")
 
             if not flaws_found:
                 st.balloons()
