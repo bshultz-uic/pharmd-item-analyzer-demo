@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import joblib
 import importlib
+import matplotlib.pyplot as plt
 import utils
 importlib.reload(utils)
 from utils import (
