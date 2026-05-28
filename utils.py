@@ -311,12 +311,19 @@ import matplotlib.pyplot as plt
 ANSWER_TEXT_COLS = ['A - Text', 'B - Text', 'C - Text', 'D - Text', 'E - Text', 'F - Text', 'G - Text']
 
 def process_uploaded_file(file):
-    """Reads the uploaded ExamSoft CSV, skipping metadata rows."""
+    """Reads the uploaded ExamSoft CSV, filtering for MC items."""
     try:
-        # Skip the first 3 rows of ExamSoft metadata to get to the real headers
-        df = pd.read_csv(file, skiprows=3, on_bad_lines='skip', encoding='utf-8')
+        # 1. "Rewind" the file pointer (Crucial for Streamlit)
+        file.seek(0)
         
-        # Deduplicate any duplicate columns to prevent pandas errors
+        # 2. Handle ExamSoft's notorious encoding issues
+        try:
+            df = pd.read_csv(file, skiprows=3, on_bad_lines='skip', encoding='utf-8')
+        except UnicodeDecodeError:
+            file.seek(0)
+            df = pd.read_csv(file, skiprows=3, on_bad_lines='skip', encoding='cp1252')
+        
+        # 3. Deduplicate columns (Your exact logic)
         seen = {}
         new_cols = []
         for col in df.columns:
@@ -329,6 +336,19 @@ def process_uploaded_file(file):
                 new_cols.append(f"{col_str}.{seen[col_str]}")
         df.columns = new_cols
         
+        # 4. Filter for Multiple Choice (MC) only
+        if 'Question Type #' in df.columns:
+            df['Question Type #'] = df['Question Type #'].astype(str)
+            df = df[df['Question Type #'].str.upper() == 'MC']
+            
+        if df.empty:
+            return None
+            
+        # 5. Check for the core columns needed for the visual dashboard
+        required = ['Item Text', 'Diff(p)', 'Point Biserial']
+        if not all(col in df.columns for col in required):
+            return None
+            
         return df
     except Exception as e:
         return None
