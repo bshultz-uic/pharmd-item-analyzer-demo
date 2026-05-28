@@ -142,12 +142,13 @@ with tab2:
     if uploaded_files and st.button("Run Analysis", key="full_exam_btn"):
         all_data = []
         for file in uploaded_files:
-            df = process_uploaded_file(file)
+            # Unpack the new tuple returned by utils.py
+            df, error_msg = process_uploaded_file(file)
             if df is not None:
                 df['Source_File'] = file.name
                 all_data.append(df)
             else:
-                st.error(f"❌ Failed to process '{file.name}'. Ensure it is an ExamSoft CSV with Multiple Choice (MC) questions.")
+                st.error(f"❌ Failed to process '{file.name}'. Reason: {error_msg}")
         
         if all_data:
             combined_df = pd.concat(all_data, ignore_index=True)
