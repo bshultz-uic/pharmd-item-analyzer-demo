@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import joblib
 import importlib
-import matplotlib.pyplot as plt
 import utils
 importlib.reload(utils)
 from utils import (
@@ -13,7 +12,6 @@ from utils import (
     check_non_functioning_distractors,
     check_k_type_v8,
     process_uploaded_file,
-    generate_analysis_pie_chart,
     generate_difficulty_distribution_chart,
     ANSWER_TEXT_COLS
 )
@@ -201,45 +199,26 @@ with tab2:
         d_fail    = len(combined_df[combined_df['NFD_Check']           == 'Flagged'])
         p_fail    = len(combined_df[combined_df['Parallel_Check']      == 'Flagged'])
 
-        # 8 fixed slots in two rows of 4 — same size regardless of how many are flagged
-        pie_configs = [
-            ("Unfocused Stem",      u_fail,    "Focused",  "Unfocused"),
-            ("Negative Phrasing",   n_fail,    "Positive", "Negative"),
-            ("Bad Blank Placement", b_fail,    "OK",       "Bad Placement"),
-            ("All/None of Above",   aota_fail, "Standard", "AOTA/NOTA"),
-            ("Multiple Correct",    mc_fail,   "Standard", "Multi-Correct"),
-            ("K-Type Format",       kt_fail,   "Standard", "K-Type"),
-            ("Distractors (NFD)",   d_fail,    "Good",     "NFDs"),
-            ("Non-Parallel",        p_fail,    "Parallel", "Non-Parallel"),
+        flag_counts = [
+            ("Unfocused",    u_fail),
+            ("Negative",     n_fail),
+            ("Bad Blanks",   b_fail),
+            ("All/None",     aota_fail),
+            ("Multi-Ans",    mc_fail),
+            ("K-Type",       kt_fail),
+            ("Distractors",  d_fail),
+            ("Non-Parallel", p_fail),
         ]
 
-        if not any(fail > 0 for _, fail, *_ in pie_configs):
+        if not any(count > 0 for _, count in flag_counts):
             st.success("🎉 No major flaws detected across the exam!")
-        else:
-            row1 = st.columns(4)
-            row2 = st.columns(4)
-            for col, (title, fail, good_lbl, bad_lbl) in zip(row1, pie_configs[:4]):
-                if fail > 0:
-                    fig = generate_analysis_pie_chart(total_items - fail, fail, good_lbl, bad_lbl, title)
-                    col.pyplot(fig, use_container_width=True)
-                    plt.close(fig)
-            for col, (title, fail, good_lbl, bad_lbl) in zip(row2, pie_configs[4:]):
-                if fail > 0:
-                    fig = generate_analysis_pie_chart(total_items - fail, fail, good_lbl, bad_lbl, title)
-                    col.pyplot(fig, use_container_width=True)
-                    plt.close(fig)
 
         # --- 3. Detailed Flag Counts ---
         st.subheader("Detailed Flag Counts")
         c1, c2, c3, c4, c5, c6, c7, c8 = st.columns(8)
-        with c1: st.metric("Unfocused",    u_fail,    delta_color="inverse")
-        with c2: st.metric("Negative",     n_fail,    delta_color="inverse")
-        with c3: st.metric("Bad Blanks",   b_fail,    delta_color="inverse")
-        with c4: st.metric("All/None",     aota_fail, delta_color="inverse")
-        with c5: st.metric("Multi-Ans",    mc_fail,   delta_color="inverse")
-        with c6: st.metric("K-Type",       kt_fail,   delta_color="inverse")
-        with c7: st.metric("Distractors",  d_fail,    delta_color="inverse")
-        with c8: st.metric("Non-Parallel", p_fail,    delta_color="inverse")
+        for col, (label, count) in zip([c1, c2, c3, c4, c5, c6, c7, c8], flag_counts):
+            pct = round(count / total_items * 100) if total_items > 0 else 0
+            col.metric(label, f"{count} ({pct}%)", delta_color="inverse")
 
         st.divider()
         st.subheader("Review Flagged Items")
