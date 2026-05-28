@@ -311,35 +311,24 @@ import matplotlib.pyplot as plt
 ANSWER_TEXT_COLS = ['A - Text', 'B - Text', 'C - Text', 'D - Text', 'E - Text', 'F - Text', 'G - Text']
 
 def process_uploaded_file(file):
-    """Reads the uploaded ExamSoft CSV."""
+    """Reads the uploaded ExamSoft CSV, skipping metadata rows."""
     try:
-        return pd.read_csv(file)
+        # Skip the first 3 rows of ExamSoft metadata to get to the real headers
+        df = pd.read_csv(file, skiprows=3, on_bad_lines='skip', encoding='utf-8')
+        
+        # Deduplicate any duplicate columns to prevent pandas errors
+        seen = {}
+        new_cols = []
+        for col in df.columns:
+            col_str = str(col)
+            if col_str not in seen:
+                seen[col_str] = 1
+                new_cols.append(col_str)
+            else:
+                seen[col_str] += 1
+                new_cols.append(f"{col_str}.{seen[col_str]}")
+        df.columns = new_cols
+        
+        return df
     except Exception as e:
         return None
-
-def generate_psychometric_chart(df):
-    """Generates a scatter plot of Point Biserial vs Difficulty."""
-    if 'Diff(p)' not in df.columns or 'Point Biserial' not in df.columns:
-        return None
-        
-    fig, ax = plt.subplots(figsize=(8, 5))
-    ax.scatter(df['Diff(p)'], df['Point Biserial'], alpha=0.7, color='#1f77b4', edgecolor='black')
-    ax.set_xlabel("Difficulty (p-value)")
-    ax.set_ylabel("Point Biserial")
-    ax.set_title("Item Psychometric Distribution")
-    
-    # Add benchmark line for acceptable Point Biserial
-    ax.axhline(0.20, color='red', linestyle='--', alpha=0.6, label='0.20 Threshold')
-    ax.legend()
-    return fig
-
-def generate_analysis_pie_chart(good_count, bad_count, good_label, bad_label):
-    """Generates a simple pie chart for flaw breakdowns."""
-    fig, ax = plt.subplots(figsize=(3, 3))
-    # Green for good, Red for flagged
-    colors = ['#4CAF50', '#F44336'] 
-    ax.pie([good_count, bad_count], labels=[good_label, bad_label], 
-           autopct='%1.1f%%', colors=colors, startangle=90, 
-           wedgeprops={'edgecolor': 'white'})
-    ax.axis('equal')
-    return fig
