@@ -355,3 +355,19 @@ def process_uploaded_file(file):
         return df, "Success"
     except Exception as e:
         return None, f"Python Error: {str(e)}"
+
+
+def generate_analysis_pie_chart(good_count, bad_count, good_label, bad_label):
+    """Generates a pie chart for flaw breakdowns. figsize is fixed so all charts render uniformly."""
+    fig, ax = plt.subplots(figsize=(3, 3))
+    colors = ['#4CAF50', '#F44336']
+    ax.pie(
+        [good_count, bad_count],
+        labels=[good_label, bad_label],
+        autopct='%1.1f%%',
+        colors=colors,
+        startangle=90,
+        wedgeprops={'edgecolor': 'white'},
+    )
+    ax.axis('equal')
+    return fig
