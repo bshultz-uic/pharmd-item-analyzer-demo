@@ -311,23 +311,26 @@ import matplotlib.pyplot as plt
 ANSWER_TEXT_COLS = ['A - Text', 'B - Text', 'C - Text', 'D - Text', 'E - Text', 'F - Text', 'G - Text']
 
 def process_uploaded_file(file):
-    """Reads the uploaded ExamSoft CSV, filtering for MC items."""
+    """Reads the uploaded ExamSoft CSV, filtering for MC items, and returns (df, error_message)."""
     try:
-        # 1. "Rewind" the file pointer (Crucial for Streamlit)
+        # Rewind file pointer for Streamlit
         file.seek(0)
         
-        # 2. Handle ExamSoft's notorious encoding issues
+        # Handle ExamSoft encoding
         try:
             df = pd.read_csv(file, skiprows=3, on_bad_lines='skip', encoding='utf-8')
         except UnicodeDecodeError:
             file.seek(0)
             df = pd.read_csv(file, skiprows=3, on_bad_lines='skip', encoding='cp1252')
-        
-        # 3. Deduplicate columns (Your exact logic)
+            
+        if df.empty:
+            return None, "File is empty after skipping the first 3 rows."
+
+        # Strip whitespace and deduplicate (matches Colab logic)
         seen = {}
         new_cols = []
         for col in df.columns:
-            col_str = str(col)
+            col_str = str(col).strip() # Strip added to prevent ExamSoft spacing bugs
             if col_str not in seen:
                 seen[col_str] = 1
                 new_cols.append(col_str)
@@ -336,19 +339,19 @@ def process_uploaded_file(file):
                 new_cols.append(f"{col_str}.{seen[col_str]}")
         df.columns = new_cols
         
-        # 4. Filter for Multiple Choice (MC) only
+        # Filter for Multiple Choice (MC)
         if 'Question Type #' in df.columns:
-            df['Question Type #'] = df['Question Type #'].astype(str)
+            df['Question Type #'] = df['Question Type #'].astype(str).str.strip()
             df = df[df['Question Type #'].str.upper() == 'MC']
-            
-        if df.empty:
-            return None
-            
-        # 5. Check for the core columns needed for the visual dashboard
+            if df.empty:
+                return None, "No Multiple Choice (MC) questions found after filtering."
+                
+        # Check for core columns needed for the visual dashboard
         required = ['Item Text', 'Diff(p)', 'Point Biserial']
-        if not all(col in df.columns for col in required):
-            return None
+        missing = [c for c in required if c not in df.columns]
+        if missing:
+            return None, f"Missing columns: {', '.join(missing)}. (Are there exactly 3 metadata rows at the top of this file?)"
             
-        return df
+        return df, "Success"
     except Exception as e:
-        return None
+        return None, f"Python Error: {str(e)}"
