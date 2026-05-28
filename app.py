@@ -12,7 +12,6 @@ from utils import (
     check_non_functioning_distractors,
     check_k_type_v8,
     process_uploaded_file,
-    generate_psychometric_chart,
     generate_analysis_pie_chart,
     ANSWER_TEXT_COLS
 )
@@ -186,14 +185,9 @@ with tab2:
         
         st.success(f"Loaded {total_items} items.")
 
-        # 1. Psychometric Chart
+        # Flaw Analysis Breakdown (Pie Charts)
         st.divider()
-        st.subheader("1. Psychometric Distribution")
-        fig_bar = generate_psychometric_chart(combined_df)
-        if fig_bar: st.pyplot(fig_bar)
-
-        # 2. Dynamic Pie Charts
-        st.subheader("2. Flaw Analysis Breakdown")
+        st.subheader("Flaw Analysis Breakdown")
         
         charts_to_show = []
         
@@ -230,13 +224,12 @@ with tab2:
         if charts_to_show:
             cols = st.columns(len(charts_to_show))
             for i, fig in enumerate(charts_to_show):
-                if fig: cols[i].pyplot(fig)
+                if fig:
+                    cols[i].pyplot(fig, use_container_width=True)
         else:
             st.info("No major flaws detected across the exam!")
 
-        # 3. Metrics & Table
-        st.divider()
-        st.subheader("3. Detailed Flag Counts")
+        st.subheader("Detailed Flag Counts")
         
         c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
         with c1: st.metric("Unfocused", u_fail, delta_color="inverse")
